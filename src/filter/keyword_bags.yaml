@@ -1,0 +1,222 @@
+# ---------- GLOBAL (applies to all countries) ----------
+sections:
+  human_harm:
+    title: "Security & Civilian Impact"
+    patterns: ["civilian","residential","apartment","school","kindergarten","market","kill","dead","murder","fatalit(y|ies)","casualt(y|ies)","child","deport","evacuat(e|ion)",
+               "brainwash","refuge","terror","genocide","occupation","ruthless","victim","damage","emergency","assault","shelling","drastic","danger","shelter",
+               "violen(t|ce)","lives","layoff","abus(e|ive)","surviv(e|ors)","harm","crim(e|inal)","crisis","humanitar(y|ian)","urgent","shot","hit","impact","devastat(e|ing)",
+               "brutal","toll","mourn","violat(e|ion)","prison","underfund","scarce","displace","punish","catastroph(e|ic)","ruin","det(ain|ention)","trag(ic|edy)","bur(y|ial)"]
+  health:
+    title: "Health & Medical Services"
+    patterns: ["hospital","clinic","ambulance","paramedic","maternity","neonatal","pediatric","elder","dialysis","intensive care","surgery","wound","injur(y|ed|ies)","burns",
+               "oncology","pharmacy","torture","health care","beat","healthcare","medical","medicine","medical","sleep","mental","psycho","disorder","trauma","PTSD","birth",
+               "wom(a|e)n","girl","mother","tear","fear","ill","patient","disease","pension","life","sex","gender","recover","anxiety","depression","suicid(e|al)","stress",
+               "brain","vaccin(e|ate)","exhaust"]
+  energy:
+    title: "Energy & Utilities"
+    patterns: ["fuel","energy","power","electric","grid","substation","transformer","power plant","\\btpp\\b","hydroelectric","dam","nuclear","blackout","outage","heating",
+               "electricity","boil","heat","\\bchp\\b","oil","gas"]
+  water:
+    title: "Water & Sanitation"
+    patterns: ["water","pipeline","sanitation","wastewater","pumping"]
+  food:
+    title: "Food & Markets"
+    patterns: ["food","grain","eat","supermarket","market","price","bak(e|ry)","grocery","bread","price","shortage","supply","grain","famine","hunger","meal"]
+
+# Global order of evidence sections (used for all countries)
+section_order:
+  - "Security & Civilian Impact"
+  - "Health & Medical Services"
+  - "Energy & Utilities"
+  - "Water & Sanitation"
+  - "Food & Markets"
+  - "Ongoing hostilities & Strikes"
+
+# ---------- PER-COUNTRY ----------
+countries:
+  ukraine:
+    must_token: "\\bukrain"
+    core: ["\\bukrain\\w+\\b", "україн\\w+", "україна", "kyiv"]
+    cities: ["\\b(kyiv|kiev|kyivska|kyiv-city|pechersk|obolon|solomianskyi|dniprovskyi|sviatoshyn|podil|shevchenkivskyi|holosiivskyi|desnianskyi|darnytsia|kharkiv|dnipro|lviv|zaporizhzhia|zaporozhye|mykolaiv|sumy|kherson|chernihiv|poltava|ivano-frankivsk|rivne|lutsk|uzhhorod|donetsk|luhansk|bakhmut|avdiivka|kramatorsk|slovyansk|melitopol|mariupol|berdyansk|enerhodar|odesa|odessa)\\b"]
+    primary_city: "kyiv"
+    actors: ["zelensky(y|i)?", "kuleba", "budanov", "syrskyi", "verkhovna rada", "\\bSBU\\b", "\\bGUR\\b", "\\bUAF\\b", "ukrenergo", "naftogaz", "dtek"]
+    military: ["drone","shahed","geran","missile","ballistic","cruise","kinzhal","kh-101","kalibr","iskander","s-300","s-400","hypersonic","barrage","strike","air\\s?raid","air-raid","toxic","incendiary","weapon","grenade","bomb","chemical"]
+    human_harm:
+      title: "Security & Civilian Impact"
+      patterns: ["siren"]
+    health:
+      title: "Health & Medical Services"
+      patterns: ["polyclinic","doctor"]
+    energy:
+      title: "Energy & Utilities"
+      patterns: ["thermal"]
+    water:
+      title: "Water & Sanitation"
+      patterns: ["waste"]
+    food:
+      title: "Food & Markets"
+      patterns: ["tractor"]
+    allow_domains: ["rferl.org","reuters.com","apnews.com","bbc.com","ft.com","un.org","news.un.org","unmas.org","reliefweb.int","unhcr.org","who.int","wfp.org","theguardian.com",
+                    "foreignaffairs.com","politico.eu","cbsnews.com","nbcnews.com","time.com","foxnews.com","latimes.com","nytimes.com","cnn.com"]
+    summary_gate:
+      min_llm_primary_conf_light: 52   # default 50
+      min_llm_primary_conf: 58         # heavy gate (sections) default 55
+      window_days: 14
+      z_k: 1.2
+      pctl: 0.70
+      min_floor: 10.0
+      norm: "log1p"
+      weights:
+        core: 15
+        cities: 10
+        city_geo: 12
+        actors: 5
+        military: 4
+        human_harm: 20
+        health: 10
+        water: 8
+        food: 8
+        energy: 6
+        allow_bonus: 1
+        url_country_bonus: 5
+        neg_frontline: -15
+        neg_geo_only: -20
+        neg_exclude: -30
+      group_caps:
+        core: 3
+        cities: 3
+        human_harm: 3
+        energy: 2
+        neg_frontline: 2
+
+  syria:
+    must_token: "\\bsyria"
+    core: ["\\bsyria(n)?\\b","سوريا","damascus"]
+    cities: ["\\b(damascus|aleppo|hama|homs|idlib|deir ez-zor|raqqa|latakia|tartus|qamishli|daraa)\\b"]
+    primary_city: "damascus"
+    actors: ["assad","sdf","ypg","hts","white helmets","syrian observatory for human rights"]
+    military: ["\\b(airstrike|shell(ing)?|drone|missile|front|militia|turkish forces|russian forces)\\b"]
+    human_harm:
+      title: "Security & Civilian Impact"
+      patterns: ["displace"]
+    health:
+      title: "Health & Medical Services"
+      patterns: ["cholera","ocha","unhcr","wfp","who"]
+    energy:
+      title: "Energy & Utilities"
+      patterns: ["batter(y|ies)"]
+    water:
+      title: "Water & Sanitation"
+      patterns: ["wash","bath","shower"]
+    food:
+      title: "Food & Markets"
+      patterns: ["convoy","aid"]
+    allow_domains: ["rferl.org","reuters.com","apnews.com","bbc.com","ft.com","un.org","news.un.org","unmas.org","reliefweb.int","unhcr.org","who.int","wfp.org","theguardian.com",
+                    "foreignaffairs.com","politico.eu","cbsnews.com","nbcnews.com","time.com","foxnews.com","latimes.com","nytimes.com","cnn.com"]
+    summary_gate:
+      min_llm_primary_conf_light: 52   # default 50
+      min_llm_primary_conf: 58         # heavy gate (sections) default 55
+      window_days: 14
+      z_k: 1.2
+      pctl: 0.70
+      min_floor: 10.0
+      norm: "log1p"
+      weights:
+        core: 15
+        cities: 10
+        city_geo: 12
+        actors: 5
+        military: 4
+        human_harm: 20
+        health: 10
+        water: 8
+        food: 8
+        energy: 6
+        allow_bonus: 1
+        url_country_bonus: 5
+        neg_frontline: -15
+        neg_geo_only: -20
+        neg_exclude: -30
+      group_caps:
+        core: 3
+        cities: 3
+        human_harm: 3
+        health: 3
+        energy: 2
+        water: 2
+        food: 2
+        neg_frontline: 2
+
+  yemen:
+    must_token: "\\byemen"
+    core: ["\\byemen(i)?\\b","اليمن","sanaa"]
+    cities: ["\\b(sanaa|aden|taiz|hodeidah|al hudaydah|marib|saada|mukalla|ibb|dhamar)\\b"]
+    primary_city: "sanaa"
+    actors: ["houthi|ansar allah","stc","coalition","saudi-led","hadi","un envoy"]
+    military: ["\\b(missile|drone|airstrike|naval|red sea|strike|frigate|uav)\\b"]
+    human_harm:
+      title: "Security & Civilian Impact"
+      patterns: ["displace"]
+    health:
+      title: "Health & Medical Services"
+      patterns: ["cholera","ocha","unhcr","wfp","who"]
+    energy:
+      title: "Energy & Utilities"
+      patterns: ["batter(y|ies)"]
+    water:
+      title: "Water & Sanitation"
+      patterns: ["wash","bath","shower"]
+    food:
+      title: "Food & Markets"
+      patterns: ["convoy","aid"]
+    allow_domains: ["rferl.org","reuters.com","apnews.com","bbc.com","ft.com","un.org","news.un.org","unmas.org","reliefweb.int","unhcr.org","who.int","wfp.org","theguardian.com",
+                    "foreignaffairs.com","politico.eu","cbsnews.com","nbcnews.com","time.com","foxnews.com","latimes.com","nytimes.com","cnn.com"]
+    summary_gate:
+      min_llm_primary_conf_light: 52   # default 50
+      min_llm_primary_conf: 58         # heavy gate (sections) default 55
+      window_days: 14
+      z_k: 1.2
+      pctl: 0.70
+      min_floor: 10.0
+      norm: "log1p"
+      weights:
+        core: 15
+        cities: 10
+        city_geo: 12
+        actors: 5
+        military: 4
+        human_harm: 20
+        health: 10
+        water: 8
+        food: 8
+        energy: 6
+        allow_bonus: 1
+        url_country_bonus: 5
+        neg_frontline: -15
+        neg_geo_only: -20
+        neg_exclude: -30
+      group_caps:
+        core: 3
+        cities: 3
+        human_harm: 3
+        health: 3
+        energy: 2
+        water: 2
+        food: 2
+        neg_frontline: 2
+
+negative_geo_only: ["brazil","colombia","south korea","london","sweden","israel","california","tennessee","india","mexico","poland","polish","florida","new jersey",
+                    "wisconsin","north carolina","south carolina","texas","pennsylvania","utah","alaska","warsaw","belarus","zapad","bosnia","serb","britain","royal","opera",
+                    "bavaria","munich","york","taiwan","prague","italy","milan","greece","venezuela","u.s.","caribbean","afghanistan","qatar","doha"]
+negative_exclude:  ["sports","soccer","football","tennis","basketball","celebrity","opinion","op-ed","editorial","analysis","live updates","live blog","newsletter","podcast",
+                    "photo essay","travel","lifestyle","recipe","stock","election","campaign trail","club","dynamo","fan","player","oil","federal","arrest","robbery","veteran",
+                    "dog","cook","recipe","restaurant","charlie","kirk","charlie kirk","los angeles","manhunt","conservative","republican","gunman","royal","opera","ballet"]
+negative_frontline: ["reconnaissance","trench","army","alliance","NATO","hunt","furia","leleka","bayraktar","liutyi","osa","aerorozvidka","bober","palianytsia","flamingo","peklo",
+                     "punisher","arms","armored","tank","mortar","artillery","swarm","anti(\\s?|-)tank","ukrainian drone"]
+
+thresholds:
+  allowlist_keep: 30
+  default_keep: 35
+  world_hub_keep: 40
+
+content_phrases_count: 8

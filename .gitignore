@@ -1,0 +1,19 @@
+# Jupyter Notebook
+.ipynb_checkpoints
+.ipynb_checkpoints/*
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[codz]
+*$py.class
+
+# Macos DSstore file
+*.DS_Store
+nbproject
+
+# Data and similar stuff
+*.env*
+data
+data/*
+old
+old/*
