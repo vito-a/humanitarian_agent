@@ -5,7 +5,7 @@ Designed for operations leads and analysts conducting due diligence on conflict-
 
 ## Features
 
-* **Data ingestion**: Scrapes and caches RSS feeds from Reuters, ReliefWeb/OCHA, UNHCR, WHO, and other vetted sources.
+* **Data ingestion**: Scrapes and caches RSS feeds from ReliefWeb/OCHA, UNHCR, WHO, and other vetted sources.
 * **Processing pipeline**:
 
   * Pre-filters articles with keyword/domain checks.
