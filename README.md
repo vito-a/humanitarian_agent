@@ -65,8 +65,8 @@ Designed for operations leads and analysts conducting due diligence on conflict-
 
 ### 2. Clone & set up environment
 ```bash
-git clone https://github.com/<your-org>/humanitarian-agent.git
-cd humanitarian-agent
+git clone https://github.com/vito-a/humanitarian_agent
+cd humanitarian_agent
 
 # Recommended: isolated env
 python -m venv .venv
