@@ -24,14 +24,26 @@ LMSTUDIO_SECTION_KEY = os.getenv("LMSTUDIO_SECTION_KEY", "lm-studio")
 # google/gemma-3n-e4b
 # liquid/lfm2-1.2b
 # microsoft/phi-4-mini-reasoning
-LMSTUDIO_MAIN_MODEL = os.getenv("LMSTUDIO_MAIN_MODEL", "liquid/lfm2-1.2b")
-LMSTUDIO_LABELER_MODEL = os.getenv("LMSTUDIO_LABELER_MODEL", "liquid/lfm2-1.2b")
-LMSTUDIO_SECTION_MODEL = os.getenv("LMSTUDIO_SECTION_MODEL", "google/gemma-3n-e4b")
 
 # Enable/disable expensive LLM cleaning
 CLEAN_WITH_LLM = True  # set True to use the llm_clean_text step
 
-# LLM settings
+# Labeler LLM settings
+LMSTUDIO_LABELER_MODEL = os.getenv("LMSTUDIO_LABELER_MODEL", "liquid/lfm2-1.2b")
+LABELER_MODEL_MAX_TOKENS     = int(os.getenv("LABELER_MODEL_MAX_TOKENS", "2000"))
+LABELER_MODEL_SEED           = int(os.getenv("LABELER_MODEL_SEED", "42"))  # LM Studio supports seed on newer builds
+
+# Section LLM settings
+LMSTUDIO_SECTION_MODEL = os.getenv("LMSTUDIO_SECTION_MODEL", "google/gemma-3n-e4b")
+SECTION_MODEL_MAX_TOKENS     = int(os.getenv("SECTION_MODEL_MAX_TOKENS", "4000"))
+SECTION_MODEL_SEED           = int(os.getenv("SECTION_MODEL_SEED", "142"))  # LM Studio supports seed on newer builds
+
+# Main LLM settings
+LMSTUDIO_MAIN_MODEL = os.getenv("LMSTUDIO_MAIN_MODEL", "qwen/qwen3-4b-2507")
+MAIN_MODEL_MAX_TOKENS     = int(os.getenv("MAIN_MODEL_MAX_TOKENS", "20000"))
+MAIN_MODEL_SEED           = int(os.getenv("MAIN_MODEL_SEED", "1142"))  # LM Studio supports seed on newer builds
+
+# General LLM settings
 TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
 TOP_P       = float(os.getenv("LLM_TOP_P", "0.95"))
 MAX_TOKENS  = int(os.getenv("LLM_MAX_TOKENS", "2000"))

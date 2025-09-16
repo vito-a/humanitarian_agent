@@ -11,8 +11,10 @@ from openai import OpenAI
 from ..config import (
     DB_PATH, MAX_DOC_AGE_DAYS, ALLOW_DOMAINS,
     FEED_CACHE_TTL_SECONDS, DESCRIPTION_MAX_LENGTH, HTTP_READ_TIMEOUT,
-    LMSTUDIO_BASE_URL, LMSTUDIO_MAIN_KEY, LMSTUDIO_MAIN_MODEL, LMSTUDIO_LABELER_MODEL, LMSTUDIO_SECTION_MODEL,
-    TOP_P, MAX_TOKENS, SEED, CLEAN_WITH_LLM, LLM_CLEANED_TITLE_MAX_LEN, LLM_CLEANED_DESC_MAX_LEN, LLM_CLEANED_TEXT_MAX_LEN
+    LMSTUDIO_BASE_URL, LMSTUDIO_MAIN_KEY, LMSTUDIO_MAIN_MODEL,
+    LMSTUDIO_LABELER_MODEL, LMSTUDIO_SECTION_MODEL,
+    TOP_P, MAIN_MODEL_MAX_TOKENS, MAIN_MODEL_SEED, CLEAN_WITH_LLM,
+    LLM_CLEANED_TITLE_MAX_LEN, LLM_CLEANED_DESC_MAX_LEN, LLM_CLEANED_TEXT_MAX_LEN
 )
 from ..sources.country_feeds import COUNTRY_FEEDS, GLOBAL_WESTERN_FEEDS, KNOWN_DOMAINS, guess_country
 from .rss_loader_cache import get_or_fetch_daily, get_feed_with_ttl
@@ -112,8 +114,8 @@ def llm_clean_text(title: str, desc: str, text: str, country: str) -> str:
             ],
             temperature=0.0,
             top_p=TOP_P,
-            max_tokens=min(1200, MAX_TOKENS or 1200),
-            seed=SEED
+            max_tokens=MAIN_MODEL_MAX_TOKENS,
+            seed=MAIN_MODEL_SEED
         )
         out = (res.choices[0].message.content or "").strip()
         if out.startswith("{") or out.startswith("```"):

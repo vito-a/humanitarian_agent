@@ -5,7 +5,7 @@ from openai import OpenAI
 
 from ..config import (
     LMSTUDIO_BASE_URL, LMSTUDIO_LABELER_KEY, LMSTUDIO_LABELER_MODEL,
-    TEMPERATURE, TOP_P, MAX_TOKENS, SEED,
+    TEMPERATURE, TOP_P, LABELER_MODEL_MAX_TOKENS, LABELER_MODEL_SEED,
     TITLE_PROMPT_MAX_LEN, DESC_PROMPT_MAX_LEN, LEAD_PROMPT_MAX_LEN, REPAIR_PROMPT_MAX_LEN
 )
 
@@ -215,8 +215,8 @@ def _call_chat(prompt: str) -> str:
         ],
         temperature=0.1 if TEMPERATURE is None else min(TEMPERATURE, 0.2),
         top_p=TOP_P,
-        max_tokens=min(MAX_TOKENS or 512, 400),
-        seed=SEED,
+        max_tokens=LABELER_MODEL_MAX_TOKENS,
+        seed=LABELER_MODEL_SEED,
     )
     return (res.choices[0].message.content or "").strip()
 

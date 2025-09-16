@@ -1,170 +1,30 @@
 """
-llm_sections.py — LLM helper for narrative report sections (top summary, why support, conclusion)
-and the PRIMARY-TOPIC LLM gate (country + allowed sections).
+llm_sections.py — Helpers for:
+- resolving section titles from keyword_bags.yaml (section_titles_for_country)
+- PRIMARY-TOPIC LLM gate (assess_primary_topic) using the SECTIONS model/key
 
-Uses LM Studio-compatible Chat Completions with the model configured for sections:
-- LMSTUDIO_BASE_URL
-- LMSTUDIO_SECTION_KEY
-- LMSTUDIO_SECTION_MODEL
-- TEMPERATURE
-- TOP_P
-- MAX_TOKENS
-- SEED
-
-Public API:
-    generate_section_via_llm(country: str, purpose: str, corpus: List[dict]) -> str
-    section_titles_for_country(target_country: str) -> List[str]
-    assess_primary_topic(...)-> Dict[str, Any]   # secondary LLM gate
-
-Behavior:
-- Narrative generation uses ONLY the provided corpus (with [n] refs).
-- Primary-topic gate is conservative: it must confirm the article is primarily about the
-  target country and matches at least one allowed section title (from keyword_bags.yaml).
+Narrative section generation (generate_section_via_llm) has been moved to:
+    src/extract/summarize.py
+and now uses the MAIN model/key.
 """
 
 from __future__ import annotations
-import re
-import json
+import re, json
 from typing import List, Dict, Optional, Any
-
 import requests
 
 from ..config import (
-    LMSTUDIO_BASE_URL, LMSTUDIO_SECTION_KEY, LMSTUDIO_SECTION_MODEL, TEMPERATURE,
-    TOP_P, MAX_TOKENS, SEED, LLM_SECTION_TEXT_MAX_LEN, SECTIONS_MAX_CHARS
+    LMSTUDIO_BASE_URL,
+    LMSTUDIO_SECTION_KEY,
+    LMSTUDIO_SECTION_MODEL,
+    TEMPERATURE,
+    TOP_P,
+    MAX_TOKENS,
+    SECTION_MODEL_SEED
 )
-
-# Read YAML via the same loader used elsewhere
 from ..filter.topic_filter import load_bags
 
-# --------------------- Prompting helpers (narratives) ---------------------
-
-def _compose_llm_prompt(country: str, purpose: str, corpus: List[Dict[str, str]]) -> str:
-    """
-    Build a deterministic prompt using only the provided corpus.
-    Each item: {'ref': int, 'title': str, 'summary': str, 'date': str}
-    """
-    head = (
-        f"You are preparing a formal humanitarian brief about {country.title()}.\n"
-        f"Draft the section: {purpose}.\n"
-        "Constraints:\n"
-        "- Use ONLY the facts in the provided excerpts.\n"
-        "- Add bracketed reference numbers like [3] right after any factual sentence that relies on a specific item.\n"
-        "- Prefer concrete numbers and dates when present. Do not invent figures.\n"
-        "- Keep the tone neutral, analytical, and policy-ready.\n"
-        "- 3–5 short paragraphs, each focused and readable.\n"
-        "- Do not include a heading; just output the body text.\n"
-    )
-    lines = ["\n=== EVIDENCE EXCERPTS (with reference numbers) ==="]
-    for it in corpus:
-        ref = it.get("ref")
-        title = (it.get("title") or "").strip()
-        date = (it.get("date") or "").strip()
-        summ = (it.get("summary") or "").strip()
-        lines.append(f"[{ref}] {title} — {date}\n{summ}\n")
-    return head + "\n".join(lines)
-
-
-# --------------------- Deterministic fallback ---------------------
-
-def _fallback_extractive_paragraphs(corpus: List[Dict[str, str]], max_chars: int = SECTIONS_MAX_CHARS) -> str:
-    """
-    Deterministic fallback: weave 3–5 extractive paragraphs using the top-N items.
-    We include the most concrete sentences and keep [n] refs attached.
-    """
-    def score_text(t: str) -> int:
-        s = 0
-        s += 4 * len(re.findall(r"\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b", t))
-        s += 2 * len(re.findall(
-            r"\b(civilian|killed|wounded|injured|drone|missile|strike|hospital|clinic|ambulance|power|blackout|water|pipeline|sanitation|food|market|price|grain)\b",
-            t, re.I
-        ))
-        return s
-
-    chunks: List[str] = []
-    budget = max_chars
-
-    ranked = sorted(
-        corpus,
-        key=lambda x: score_text(x.get("summary") or "") + (10 if re.search(r"\[\d+\]", x.get("summary") or "") else 0),
-        reverse=True,
-    )
-    for it in ranked:
-        ref = it.get("ref")
-        summ = (it.get("summary") or "").strip()
-        if not summ.endswith(f"[{ref}]"):
-            summ = (summ + f" [{ref}]").strip()
-        para = summ
-        if budget - len(para) < 0:
-            break
-        chunks.append(para)
-        budget -= len(para)
-        if len(chunks) >= 4:
-            break
-    return "\n\n".join(chunks)
-
-
-# --------------------- LM Studio call ---------------------
-
-def _call_lmstudio_chat(prompt: str) -> Optional[str]:
-    """
-    Call the LM Studio-compatible Chat Completions endpoint.
-    Returns the text content on success, or None on failure.
-    """
-    base = LMSTUDIO_BASE_URL.rstrip("/")
-    url = f"{base}/chat/completions"
-
-    headers = {
-        "Authorization": f"Bearer {LMSTUDIO_SECTION_KEY}" if LMSTUDIO_SECTION_KEY else "",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "model": LMSTUDIO_SECTION_MODEL,
-        "temperature": TEMPERATURE,
-        "top_p": TOP_P,
-        "max_tokens": MAX_TOKENS,
-        "seed": SEED,
-        "stream": False,
-        "messages": [
-            {"role": "system", "content": "You are a careful analyst. Follow constraints strictly and never invent data."},
-            {"role": "user", "content": prompt},
-        ],
-    }
-
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-        text = (
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-        )
-        return (text or "").strip()
-    except Exception:
-        return None
-
-
-# --------------------- Public API (narratives) ---------------------
-
-def generate_section_via_llm(country: str, purpose: str, corpus: List[Dict[str, str]]) -> str:
-    """
-    Generate a narrative section using LM Studio if reachable; otherwise fall back
-    to a deterministic extractive summary. Temperature and seed come from config.
-    """
-    if not corpus:
-        return ""
-
-    prompt = _compose_llm_prompt(country, purpose, corpus)
-    text = _call_lmstudio_chat(prompt)
-    if text:
-        return text[:LLM_SECTION_TEXT_MAX_LEN].strip()
-
-    return _fallback_extractive_paragraphs(corpus)
-
-
-# ===================== Helpers for PRIMARY-TOPIC GATE =====================
+# --------------------- Section titles (YAML) ---------------------
 
 def section_titles_for_country(target_country: str) -> List[str]:
     """
@@ -224,7 +84,8 @@ def section_titles_for_country(target_country: str) -> List[str]:
             out.append(tt); seen2.add(tt)
     return out
 
-# --------------------- Primary-topic LLM gate ---------------------
+
+# --------------------- Primary-topic LLM gate (SECTIONS model) ---------------------
 
 def _strip_code_fences(s: str) -> str:
     s = s.strip()
@@ -233,26 +94,33 @@ def _strip_code_fences(s: str) -> str:
         s = re.sub(r"\s*```$", "", s)
     return s.strip()
 
-def _balanced_json_slice(s: str) -> Optional[str]:
+def _balanced_json_slice(s: str) -> Optional[Dict[str, Any]]:
     start = s.find("{")
-    if start == -1: return None
+    if start == -1:
+        return None
     depth = 0
     for i in range(start, len(s)):
         c = s[i]
-        if c == "{": depth += 1
+        if c == "{":
+            depth += 1
         elif c == "}":
             depth -= 1
-            if depth == 0: return s[start:i+1]
+            if depth == 0:
+                return s[start:i+1]
     return None
 
 def _try_parse_to_json(text: str) -> Optional[Dict[str, Any]]:
     raw = _strip_code_fences(text)
-    try: return json.loads(raw)
-    except Exception: pass
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
     block = _balanced_json_slice(raw)
     if block:
-        try: return json.loads(block)
-        except Exception: pass
+        try:
+            return json.loads(block)
+        except Exception:
+            pass
     return None
 
 def _repair_prompt(raw: str) -> str:
@@ -317,7 +185,7 @@ def assess_primary_topic(
         f"LEAD: {lead}\n"
     )
 
-    # Call LM Studio
+    # Call LM Studio (sections model)
     base = LMSTUDIO_BASE_URL.rstrip("/")
     url = f"{base}/chat/completions"
     headers = {
@@ -329,7 +197,7 @@ def assess_primary_topic(
         "temperature": TEMPERATURE,
         "top_p": TOP_P,
         "max_tokens": MAX_TOKENS,
-        "seed": SEED,
+        "seed": SECTION_MODEL_SEED,
         "stream": False,
         "messages": [
             {"role": "system", "content": "You are a careful analyst. Follow constraints strictly and never invent data."},
@@ -351,7 +219,7 @@ def assess_primary_topic(
 
     parsed = _try_parse_to_json(out)
     if not parsed:
-        # try a one-shot repair
+        # one-shot repair
         try:
             resp2 = requests.post(url, headers=headers, json={**payload, "messages":[
                 {"role": "system", "content": "Return only JSON."},
@@ -371,6 +239,7 @@ def assess_primary_topic(
     if not parsed:
         return {"pass": False, "confidence": 0, "sections": [], "reason": "parse_error"}
 
+    # Coerce + clamp
     try: ok = bool(parsed.get("pass", False))
     except Exception: ok = False
     try: conf = int(parsed.get("confidence", 0))

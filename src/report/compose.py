@@ -13,9 +13,8 @@ from ..config import (
     BODY_SUMMARY_MAX_LENGTH,
     CATEGORY_BOOST_FACTOR
 )
-from ..extract.summarize import summary_for_page
+from ..extract.summarize import summary_for_page, generate_section_via_llm
 from ..filter.topic_filter import load_bags
-from ..filter.llm_sections import generate_section_via_llm
 
 _NORM_RE = re.compile(r"norm=([0-9]+(?:\.[0-9]+)?)")
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
@@ -289,7 +288,7 @@ def build_country_report(country: str, max_items: int = MAX_ARTICLES, per_sectio
                 if len(corpus) >= max_refs: break
         return corpus
 
-    corpus = collect_corpus(max_refs=8)
+    corpus = collect_corpus(max_refs=15)
 
     top_summary_title = f"Humanitarian conditions summary for {country_title}"
     top_summary_body = generate_section_via_llm(country, top_summary_title, corpus)
