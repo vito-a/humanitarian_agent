@@ -40,15 +40,15 @@ def render_from_json(json_path: str,
     out_pdf  = Path(out_pdf) if out_pdf else d_pdf
 
     # Generate DOCX/PDF
-#    generate_docx_structured(
-#        sections=sections,
-#        references_by_num=references,
-#        exec_overview=exec_overview,
-#        filename=str(out_docx),
-#        country=country,
-#        report_title=report_title,
-#        section_order=order,
-#    )
+    generate_docx_structured(
+        sections=sections,
+        references_by_num=references,
+        exec_overview=exec_overview,
+        filename=str(out_docx),
+        country=country,
+        report_title=report_title,
+        section_order=order,
+    )
     generate_pdf_structured(
         sections=sections,
         references_by_num=references,

@@ -15,27 +15,33 @@ This module uses:
 - reportlab for .pdf
 """
 
+import re
 from typing import Dict, List, Any, Optional, Iterable
 from pathlib import Path
-import re
 from math import ceil
 
 # --- DOCX ---
 from docx import Document
-from docx.shared import Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_PARAGRAPH_ALIGNMENT
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 
 # --- PDF (ReportLab) ---
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
-from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, Image
+from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import A4, LETTER
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib import colors
 from xml.sax.saxutils import escape as _esc
 
+from ..config import ARIAL_FONT_PATH
+from ..utils.coat_of_arms import ensure_coat_of_arms
 
 # ------------------------ Common helpers ------------------------
 
@@ -86,6 +92,138 @@ def _shorten_key_points_twofold(text: str) -> str:
     keep = max(1, ceil(len(sents) / 2))
     return " ".join(sents[:keep]).strip()
 
+def add_coat_of_arms(doc, country: str):
+    """
+    Insert the coat of arms image left-aligned at the top of the report.
+    """
+    try:
+        coa_path = ensure_coat_of_arms(country)
+        paragraph = doc.add_paragraph()
+        run = paragraph.add_run()
+        with coa_path.open("rb") as f:
+            run.add_picture(f, width=Inches(0.9))
+        paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT  # left alignment
+    except Exception as e:
+        print(f"⚠️ Could not add coat of arms image: {e}")
+
+def coat_of_arms_image(country: str):
+    """
+    Return a flowable Image of the coat of arms, left-aligned at top.
+    """
+    try:
+        coa_path = ensure_coat_of_arms(country)
+        img = Image(coa_path, width=0.9*inch, height=0.9*inch)
+        img.hAlign = "LEFT"   # left alignment
+        return img
+    except Exception as e:
+        print(f"⚠️ Could not load coat of arms image: {e}")
+        return None
+
+def add_header_with_coa_docx(doc, country: str, report_title: str,
+                             img_width_in: float = 0.9, gap_in: float = 0.2):
+    """
+    Insert a header row:
+      [ coat of arms image ][ gap ][ report title ]
+    - Table spans the full page width.
+    - Image and gap columns fixed; title column takes remaining width.
+    - Vertically centered, no borders.
+    """
+    # Create table
+    #tbl = doc.add_table(rows=1, cols=3)
+    tbl = doc.add_table(rows=1, cols=2)
+    _strip_table_borders(tbl)
+    tbl.alignment = WD_TABLE_ALIGNMENT.LEFT
+
+    # Compute usable page width (page minus left+right margins)
+    section = doc.sections[0]
+    usable_width = section.page_width - section.left_margin - section.right_margin
+
+    # Convert to EMUs (1 inch = 914400 EMUs)
+    emu_per_inch = 914400
+    img_width_emu = int(img_width_in * emu_per_inch)
+    gap_width_emu = int(gap_in * emu_per_inch)
+    title_width_emu = usable_width * emu_per_inch - img_width_emu - gap_width_emu
+
+    tbl.columns[0].width = img_width_emu
+    #tbl.columns[1].width = gap_width_emu
+    #tbl.columns[2].width = title_width_emu
+    tbl.columns[1].width = title_width_emu
+
+    row = tbl.rows[0]
+    #cell_img, cell_gap, cell_title = row.cells
+    cell_img, cell_title = row.cells
+
+    # Image cell
+    p_img = cell_img.paragraphs[0]
+    run = p_img.add_run()
+    try:
+        coa_path = ensure_coat_of_arms(country)
+        with coa_path.open("rb") as f:
+            run.add_picture(f, width=Inches(0.9))
+    except Exception:
+        p_img.add_run(" ")
+    p_img.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    cell_img.width = img_width_in
+    cell_img.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+    # Gap cell
+    #p_gap = cell_gap.paragraphs[0]
+    #p_gap.add_run(" ")
+    #cell_gap.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+    # Title cell
+    p_title = cell_title.paragraphs[0]
+    run_t = p_title.add_run(report_title)
+    if "Title" in doc.styles:
+        p_title.style = doc.styles["Title"]
+    else:
+        run_t.font.size = Pt(22)
+        run_t.font.bold = True
+    p_title.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    cell_title.width = usable_width - img_width_in
+    cell_title.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+def header_with_coa_pdf(country: str, report_title: str, styles,
+                        img_size_in: float = 0.9, gap_in: float = 0.2,
+                        total_width: float | None = None):
+    """
+    Returns a flowable that renders:
+      [ coat of arms image ] [ gap ] [ report title ]
+    left-aligned, vertically centered, no borders.
+    - `styles` should include a "Title" style (e.g., getSampleStyleSheet()["Title"])
+    - If `total_width` is provided (doc.width), we set explicit column widths.
+    """
+    coa_path = ensure_coat_of_arms(country)
+    try:
+        img = Image(coa_path, width=img_size_in*inch, height=img_size_in*inch)
+    except Exception:
+        # Fallback placeholder if image missing
+        img = Paragraph("⚠️ Coat of arms not available", styles["Normal"])
+
+    # Build the row: [img][gap][title]
+    title_para = Paragraph(report_title, styles["Title"])
+    data = [[img, Spacer(gap_in*inch, 0), title_para]]
+
+    if total_width:
+        img_w = img_size_in * inch
+        gap_w = gap_in * inch
+        title_w = max(0, total_width - 2 * img_w - gap_w)
+        col_widths = [img_w, gap_w, title_w]
+    else:
+        col_widths = None  # let platypus auto-size
+
+    tbl = Table(data, colWidths=col_widths, hAlign="LEFT")
+    tbl.setStyle(TableStyle([
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("LEFTPADDING", (0,0), (-1,-1), 0),
+        ("RIGHTPADDING", (0,0), (-1,-1), 0),
+        ("TOPPADDING", (0,0), (-1,-1), 0),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+        # no borders:
+        ("BOX", (0,0), (-1,-1), 0, colors.white),
+        ("INNERGRID", (0,0), (-1,-1), 0, colors.white),
+    ]))
+    return tbl
 
 # ------------------------ DOCX utilities ------------------------
 
@@ -152,7 +290,6 @@ def _set_cell_bottom_border(cell, sz=12, color="000000"):
     bottom.set(qn('w:color'), color)
     borders.append(bottom)
 
-
 # ------------------ DOCX ------------------
 
 def generate_docx_structured(
@@ -165,11 +302,13 @@ def generate_docx_structured(
     section_order: Optional[List[str]] = None,
 ) -> None:
     doc = Document()
-    title = report_title or _default_title(country)
 
-    # Title
-    h = doc.add_heading(title, 0)
-    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # Add header with title and the coat of arms
+    title = report_title or _default_title(country)
+    #h = doc.add_heading(title, 0)
+    #h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    #add_coat_of_arms(doc, country)
+    add_header_with_coa_docx(doc, country, title)
 
     # Executive summary (optional)
     if exec_overview:
@@ -279,18 +418,26 @@ def generate_pdf_structured(
     report_title: Optional[str] = None,
     section_order: Optional[List[str]] = None,
 ) -> None:
+#    pdfmetrics.registerFont(TTFont('Arial', ARIAL_FONT_PATH))
     title = report_title or _default_title(country)
     Path(filename).parent.mkdir(parents=True, exist_ok=True)
 
     # Styles
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(name="TitleCenter", parent=styles["Title"], alignment=TA_CENTER)
     h1 = ParagraphStyle(name="H1", parent=styles["Heading1"], spaceBefore=6, spaceAfter=6)
     body = ParagraphStyle(name="Body", parent=styles["BodyText"], leading=14)
 
     flow = []
-    flow.append(Paragraph(title, title_style))
-    flow.append(Spacer(1, 12))
+    #title_style = ParagraphStyle(name="TitleCenter", parent=styles["Title"], alignment=TA_CENTER)
+    #title_style.fontName = 'Arial'
+    #h1.fontName = 'Arial'
+    #body.fontName = 'Arial'
+    #flow.append(coat_of_arms_image(country))
+    #flow.append(Spacer(1, 0.2*inch))
+    #flow.append(Paragraph(title, title_style))
+    #flow.append(Spacer(1, 12))
+    flow.append(header_with_coa_pdf(country, report_title, styles, total_width=LETTER[0]))
+    flow.append(Spacer(1, 0.2*inch))
 
     # Executive Summary
     if exec_overview:
@@ -393,5 +540,5 @@ def generate_pdf_structured(
             flow.append(Paragraph(line, body))
             flow.append(Spacer(1, 4))
 
-    doc = SimpleDocTemplate(filename, pagesize=letter, title=title)
+    doc = SimpleDocTemplate(filename, pagesize=LETTER, title=title)
     doc.build(flow)

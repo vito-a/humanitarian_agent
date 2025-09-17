@@ -11,13 +11,28 @@ from ..config import (
     MAX_DOC_AGE_DAYS,
     MAX_ARTICLES,
     BODY_SUMMARY_MAX_LENGTH,
-    CATEGORY_BOOST_FACTOR
+    CONCLUSION_CORPUS_MAX_REFS,
+    CATEGORY_BOOST_FACTOR,                  # Keep category boost only for section patterns found in categories (no core boost here)
 )
-from ..extract.summarize import summary_for_page, generate_section_via_llm
+from ..extract.summarize import (
+    summary_for_page,                      # if you have a helper like this elsewhere, keep using it
+    generate_section_via_llm,              # MAIN model narrative writer (unchanged)
+    summarize_page_with_section_model,     # NEW: SECTION model backfill for page.summary
+)
 from ..filter.topic_filter import load_bags
+from ..extract.summarize import generate_section_via_llm
+from ..utils.coat_of_arms import ensure_coat_of_arms
 
 _NORM_RE = re.compile(r"norm=([0-9]+(?:\.[0-9]+)?)")
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+def format_us_date(date: dt.date | None = None) -> str:
+    """
+    Return the given date formatted in US style 'Month Day, Year'.
+    If no date is passed, use today's date.
+    """
+    d = date or dt.date.today()
+    return d.strftime("%B %d, %Y")
 
 def _parse_norm(reason: str | None) -> float:
     if not reason:
@@ -123,6 +138,7 @@ def build_country_report(country: str, max_items: int = MAX_ARTICLES, per_sectio
     try: per_section_cap = max(1, int(per_section_cap))
     except Exception: per_section_cap = 4
 
+    # Pull candidate pages (may include rows with NULL/empty summaries)
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
         c.execute(
@@ -142,6 +158,23 @@ def build_country_report(country: str, max_items: int = MAX_ARTICLES, per_sectio
         )
         rows = c.fetchall()
 
+        # ---------- Backfill missing summaries using SECTION model ----------
+        updated = 0
+        for (pid, url, title, published_at, text, summary, cats_json, classifier_reason) in rows:
+            needs = (summary is None) or (isinstance(summary, str) and summary.strip() == "")
+            if needs:
+                # Prefer a compact "desc" from page.summary (none) -> build quick lead from text
+                lead = " ".join((text or "").split()[:120])
+                # Generate short factual summary using the smaller SECTION model
+                new_sum = summarize_page_with_section_model(title or "", lead or "", text or "", country)
+                new_sum = (new_sum or "").strip()
+                if new_sum:
+                    c.execute("UPDATE pages SET summary = ? WHERE id = ?", (new_sum, pid))
+                    updated += 1
+        if updated:
+            conn.commit()
+            print(f"compose: backfilled {updated} missing summaries using SECTION model")
+
     print(f"compose: found {len(rows)} rows for country: {country}")
 
     bags = load_bags()
@@ -149,6 +182,32 @@ def build_country_report(country: str, max_items: int = MAX_ARTICLES, per_sectio
     titles = [t for (t, _, _) in section_defs]
     evidence_titles = _resolve_global_order(bags, titles)
     country_title = country.title()
+
+    coa_path = ensure_coat_of_arms(country)
+    if coa_path:
+        print(f"compose: coat of arms ready at {coa_path}")
+    else:
+        print("compose: coat of arms not available (skipping image)")
+
+    # Re-read with updated summaries to proceed consistently
+    with sqlite3.connect(DB_PATH) as conn2:
+        c2 = conn2.cursor()
+        c2.execute(
+            """
+            SELECT p.id, p.url, p.title, p.published_at, p.text, p.summary,
+                   L.categories_json, L.classifier_reason
+            FROM pages p
+            JOIN page_labels L
+              ON L.url = p.url
+            WHERE L.country_key = ?
+              AND L.is_primary = 1
+              AND (p.published_at IS NULL OR julianday('now') - julianday(p.published_at) <= ?)
+            ORDER BY p.published_at DESC NULLS LAST, p.id DESC
+            LIMIT ?;
+        """,
+            (country, MAX_DOC_AGE_DAYS, max_items),
+        )
+        rows = c2.fetchall()
 
     # Prepare items
     items: List[Dict[str, Any]] = []
@@ -171,7 +230,7 @@ def build_country_report(country: str, max_items: int = MAX_ARTICLES, per_sectio
                 "title": title or "",
                 "published_at": published_at,
                 "text": text or "",
-                "summary": (summary or ""),
+                "summary": (summary or ""),  # now guaranteed to be non-empty for rows we backfilled
                 "categories": cats_list,
                 "categories_text": cat_text,
                 "classifier_reason": classifier_reason or "",
@@ -240,8 +299,14 @@ def build_country_report(country: str, max_items: int = MAX_ARTICLES, per_sectio
     refs_by_num, url_to_num, next_num = {}, {}, 1
     for it in items:
         pid, url, title, published_at = it["id"], it["url"], it["title"], it["published_at"]
-        s = summary_for_page(pid)
+        s = (it["summary"] or None)
+        needs = (s is None) or (isinstance(s, str) and s.strip() == "")
+        if needs:
+            print(f"Summary empty, regenerating\n")
+            s = summary_for_page(pid)  # keep any additional per-page summarizer logic you already have
         body = (s.get("body") or s.get("summary") or "") if isinstance(s, dict) else str(s or "")
+        if not body.strip():
+            body = it.get("summary") or ""  # fallback to DB summary we just backfilled
         if url not in url_to_num:
             url_to_num[url] = next_num
             refs_by_num[next_num] = {"url": url, "title": title, "published_at": published_at}
@@ -259,6 +324,34 @@ def build_country_report(country: str, max_items: int = MAX_ARTICLES, per_sectio
     for name, lst in sections.items():
         lst.sort(key=lambda x: (float(x.get("norm_score") or 0.0), (x.get("published_at") or "")), reverse=True)
 
+    top_summary_title = f"Humanitarian conditions summary for {country_title}"
+
+    # Try to reuse existing narratives from today's JSON
+    as_of_today = dt.datetime.utcnow().date().isoformat()
+    json_path = REPORTS_DIR / f"{country}_{as_of_today}.json"
+
+    cached_top = cached_why = cached_conc = ""
+
+    if json_path.exists():
+        try:
+            prev = json.loads(json_path.read_text(encoding="utf-8"))
+            prev_secs = prev.get("sections", {})
+
+            def _pull(name: str) -> str:
+                arr = prev_secs.get(name) or []
+                if isinstance(arr, list) and arr and isinstance(arr[0], dict):
+                    return str(arr[0].get("summary") or "").strip()
+                return ""
+
+            cached_top = _pull(top_summary_title)
+            cached_why = _pull("Why These Conditions Justify Support")
+            cached_conc = _pull("Conclusion")
+
+            if any([cached_top, cached_why, cached_conc]):
+                print("compose: reusing non-empty narrative sections from existing JSON")
+        except Exception:
+            pass
+
     def collect_corpus(max_refs: int = 12) -> List[Dict[str, Any]]:
         seen = set()
         corpus: List[Dict[str, Any]] = []
@@ -271,44 +364,69 @@ def build_country_report(country: str, max_items: int = MAX_ARTICLES, per_sectio
                     it = lst[idx]
                     r = it.get("ref_num")
                     if r and r not in seen:
-                        corpus.append({"ref": r, "title": it.get("title") or "", "summary": it.get("summary") or "", "date": (it.get("published_at") or "")[:10]})
+                        corpus.append({
+                            "ref": r,
+                            "title": it.get("title") or "",
+                            "summary": it.get("summary") or "",
+                            "date": (it.get("published_at") or "")[:10],
+                        })
                         seen.add(r)
-                        if len(corpus) >= max_refs: break
+                        if len(corpus) >= max_refs:
+                            break
                     added_any = True
-            if not added_any: break
+            if not added_any:
+                break
             idx += 1
+
         if len(corpus) < max_refs:
             for sect in evidence_titles:
                 for it in sections.get(sect, []):
                     r = it.get("ref_num")
                     if r and r not in seen:
-                        corpus.append({"ref": r, "title": it.get("title") or "", "summary": it.get("summary") or "", "date": (it.get("published_at") or "")[:10]})
+                        corpus.append({
+                            "ref": r,
+                            "title": it.get("title") or "",
+                            "summary": it.get("summary") or "",
+                            "date": (it.get("published_at") or "")[:10],
+                        })
                         seen.add(r)
-                        if len(corpus) >= max_refs: break
-                if len(corpus) >= max_refs: break
+                        if len(corpus) >= max_refs:
+                            break
+                if len(corpus) >= max_refs:
+                    break
         return corpus
 
-    corpus = collect_corpus(max_refs=15)
+    # Only build a corpus if at least one narrative is missing
+    corpus = []
+    if not (cached_top and cached_why and cached_conc):
+        corpus = collect_corpus(max_refs=CONCLUSION_CORPUS_MAX_REFS)
 
-    top_summary_title = f"Humanitarian conditions summary for {country_title}"
-    top_summary_body = generate_section_via_llm(country, top_summary_title, corpus)
-    why_support_body = generate_section_via_llm(country, "Why These Conditions Justify Support", corpus)
-    conclusion_body = generate_section_via_llm(country, "Conclusion", corpus)
+    # Generate only missing narratives; reuse cached if present
+    print(f"Generating top summary body\n")
+    top_summary_body = cached_top or generate_section_via_llm(country, top_summary_title, corpus)
+    why_support_body = cached_why or generate_section_via_llm(country, "Why These Conditions Justify Support", corpus)
+    print(f"Generating Why Support\n")
+    conclusion_body  = cached_conc or generate_section_via_llm(country, "Conclusion", corpus)
+    print(f"Generating Conclusion\n")
 
-    sections[top_summary_title] = [{"title": top_summary_title, "summary": top_summary_body, "ref_num": None}]
-    sections["Why These Conditions Justify Support"] = [{"title": "Why Support", "summary": why_support_body, "ref_num": None}]
-    sections["Conclusion"] = [{"title": "Conclusion", "summary": conclusion_body, "ref_num": None}]
+    # Store narratives back into sections (these will be written to JSON)
+    sections[top_summary_title] = [{"title": top_summary_title, "summary": top_summary_body.replace('‑','-').replace('■', '-'), "ref_num": None}]
+    sections["Why These Conditions Justify Support"] = [{"title": "Why Support", "summary": why_support_body.replace('‑','-').replace('■', '-'), "ref_num": None}]
+    sections["Conclusion"] = [{"title": "Conclusion", "summary": conclusion_body.replace('‑','-').replace('■', '-'), "ref_num": None}]
 
     if other_section_title in sections and other_section_title not in section_order:
         section_order.append(other_section_title)
 
     report = {
         "country": country,
-        "as_of": dt.datetime.utcnow().date().isoformat(),
+        "as_of": dt.datetime.utcnow().date().isoformat(), # ensure we use today's string used for caching
         "sections": sections,
         "references_by_num": refs_by_num,
         "overview_texts": [],
         "section_order": section_order,
+        "assets": {
+            "coat_of_arms": str(coa_path) if coa_path else ""
+        },
     }
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

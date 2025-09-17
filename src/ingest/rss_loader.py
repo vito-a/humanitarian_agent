@@ -30,6 +30,7 @@ from ..filter.llm_sections import (
 from ..db import upsert_page_label
 from ..ingest.text_clean import strip_nav_boiler
 from ..validate.calibration import compute_calibration
+from ..extract.summarize import summarize_page_with_section_model
 
 from ..ingest.categories import (
     extract_rss_categories,
@@ -506,8 +507,42 @@ def load_country(country: str, primary_city: Optional[str] = None, max_items: in
                       f"simple={score}; summary_raw={boosted_sum}; norm={norm_total:.2f};z_ref=({mu:.2f},{sd:.2f}); p70={p70:.2f}; "
                       f"llm_primary_pass conf={llm_conf}, secs={llm_secs}, {LMSTUDIO_SECTION_MODEL} finally approves that, reason: {prim}")
 
+                # ---------- NEW: choose summary_for_db BEFORE UPSERT ----------
+                # Prefer decent RSS description; if missing/too short, generate with SECTION model.
+                summary_for_db = (desc_text or "").strip()
+                if len(summary_for_db) < 80:
+                    # Use title + first ~120 words for context
+                    lead_for_sum = " ".join((text or "").split()[:120])
+                    try:
+                        generated = summarize_page_with_section_model(title_str, lead_for_sum, text or "", country)
+                        if generated:
+                            summary_for_db = generated.strip()
+                    except Exception:
+                        pass
+
+                # Persist accepted page
+                upsert_page(url, title, pub_raw, pub_iso, text, summary_for_db, country, "rss", all_cats_json)
+
+                # ---------- Post-upsert: if summary is NULL/empty in DB, backfill it now ----------
+                try:
+                    with sqlite3.connect(DB_PATH) as conn:
+                        c = conn.cursor()
+                        c.execute("SELECT summary FROM pages WHERE url = ?", (url,))
+                        row = c.fetchone()
+                        db_sum = (row[0] if row else "") or ""
+                        if not db_sum.strip():
+                            # generate now (again, if first attempt didn't produce)
+                            lead_for_sum2 = " ".join((text or "").split()[:120])
+                            gen2 = summarize_page_with_section_model(title_str, lead_for_sum2, text or "", country)
+                            if (gen2 or "").strip():
+                                c.execute("UPDATE pages SET summary=? WHERE url=?", (gen2.strip(), url))
+                                conn.commit()
+                                print("    ✍️  Backfilled summary in DB with SECTION model.")
+                except Exception as _e:
+                    # Non-fatal
+                    pass
+
                 # ---------- Persist accepted ----------
-                upsert_page(url, title, pub_raw, pub_iso, text, desc_text, country, "rss", all_cats_json)
                 upsert_page_label(
                     url=url,
                     country_key=country,
