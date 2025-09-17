@@ -40,7 +40,8 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib import colors
 from xml.sax.saxutils import escape as _esc
 
-from ..config import ARIAL_FONT_PATH
+from ..config import PDF_LEFT_MARGIN, PDF_RIGHT_MARGIN, PDF_TOP_MARGIN, PDF_BOTTOM_MARGIN, ARIAL_FONT_PATH
+
 from ..utils.coat_of_arms import ensure_coat_of_arms
 
 # ------------------------ Common helpers ------------------------
@@ -207,7 +208,7 @@ def header_with_coa_pdf(country: str, report_title: str, styles,
     if total_width:
         img_w = img_size_in * inch
         gap_w = gap_in * inch
-        title_w = max(0, total_width - 2 * img_w - gap_w)
+        title_w = total_width - img_w - gap_w - PDF_LEFT_MARGIN * inch - PDF_RIGHT_MARGIN * inch
         col_widths = [img_w, gap_w, title_w]
     else:
         col_widths = None  # let platypus auto-size
@@ -540,5 +541,13 @@ def generate_pdf_structured(
             flow.append(Paragraph(line, body))
             flow.append(Spacer(1, 4))
 
-    doc = SimpleDocTemplate(filename, pagesize=LETTER, title=title)
+    doc = SimpleDocTemplate(
+        filename,
+        pagesize = LETTER,
+        title = title,
+        leftMargin = PDF_LEFT_MARGIN * inch,
+        rightMargin = PDF_RIGHT_MARGIN * inch,
+        topMargin = PDF_TOP_MARGIN * inch,
+        bottomMargin = PDF_BOTTOM_MARGIN * inch
+    )
     doc.build(flow)

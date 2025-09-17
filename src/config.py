@@ -89,6 +89,10 @@ CORE_CATEGORY_BOOST   = 1.5  # if any 'core' keyword is found in categories, mul
 #PDF settings
 ARIAL_FONT_PATH = "~/Library/Fonts/Arial.ttf"
 COAT_OF_ARMS_DEFAULT_PATH = "assets/coat_of_arms"
+PDF_LEFT_MARGIN = 1.25
+PDF_RIGHT_MARGIN = 1
+PDF_TOP_MARGIN = 0.75
+PDF_BOTTOM_MARGIN = 0.5
 
 # Acceptance criteria knobs
 MAX_DOC_AGE_DAYS = 180     # ≤ 6 months
