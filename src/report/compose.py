@@ -26,14 +26,6 @@ from ..utils.coat_of_arms import ensure_coat_of_arms
 _NORM_RE = re.compile(r"norm=([0-9]+(?:\.[0-9]+)?)")
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
-def format_us_date(date: dt.date | None = None) -> str:
-    """
-    Return the given date formatted in US style 'Month Day, Year'.
-    If no date is passed, use today's date.
-    """
-    d = date or dt.date.today()
-    return d.strftime("%B %d, %Y")
-
 def _parse_norm(reason: str | None) -> float:
     if not reason:
         return 0.0

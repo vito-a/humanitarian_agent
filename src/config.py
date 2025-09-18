@@ -7,6 +7,8 @@ ROOT = Path(os.getenv("AGENTS_DIR", "/home/jovyan/work"))
 CURRENT_AGENT_DIR = ROOT / "humanitarian_agent"
 DATA_DIR = CURRENT_AGENT_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True, parents=True)
+AGENT_VERSION = "0.1"
+REPORT_TIMEZONE = "Etc/GMT+4"
 
 DB_PATH = DATA_DIR / "rss.sqlite3"           # rename from ukraine.db
 REPORTS_DIR = DATA_DIR / "reports"; REPORTS_DIR.mkdir(exist_ok=True, parents=True)

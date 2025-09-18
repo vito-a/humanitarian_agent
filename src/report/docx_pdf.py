@@ -32,6 +32,7 @@ from docx.opc.constants import RELATIONSHIP_TYPE as RT
 # --- PDF (ReportLab) ---
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle, Image
 from reportlab.lib.units import inch
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.lib.pagesizes import A4, LETTER
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -40,8 +41,8 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib import colors
 from xml.sax.saxutils import escape as _esc
 
-from ..config import PDF_LEFT_MARGIN, PDF_RIGHT_MARGIN, PDF_TOP_MARGIN, PDF_BOTTOM_MARGIN, ARIAL_FONT_PATH
-
+from ..config import PDF_LEFT_MARGIN, PDF_RIGHT_MARGIN, PDF_TOP_MARGIN, PDF_BOTTOM_MARGIN, AGENT_VERSION, ARIAL_FONT_PATH
+from ..utils.branding import branding_line
 from ..utils.coat_of_arms import ensure_coat_of_arms
 
 # ------------------------ Common helpers ------------------------
@@ -226,6 +227,76 @@ def header_with_coa_pdf(country: str, report_title: str, styles,
     ]))
     return tbl
 
+def add_docx_header_branding(doc) -> None:
+    """
+    Add top-right small branding line in the header of ALL sections/pages.
+    """
+    text = branding_line(AGENT_VERSION)
+    for section in doc.sections:
+        header = section.header
+        # ensure at least one paragraph exists
+        para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        # clear existing runs in that paragraph (optional)
+        for r in list(para.runs):
+            r.clear()
+        run = para.add_run(text)
+        run.font.size = Pt(8)
+        run.font.italic = True   # optional for subtle styling
+
+# docx: bottom-right branding in footer for every section/page
+def add_docx_footer_branding(doc) -> None:
+    """
+    Add bottom-right small branding line in the FOOTER of ALL sections/pages.
+    """
+    text = branding_line(AGENT_VERSION)
+    for section in doc.sections:
+        footer = section.footer
+        para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        # clear existing runs (optional)
+        for r in list(para.runs):
+            r.clear()
+        run = para.add_run(text)
+        run.font.size = Pt(8)
+        run.font.italic = True  # optional
+
+def _on_page_branding_top(canvas: Canvas, doc) -> None:
+    """
+    Draw small, right-aligned branding text at the top of each page.
+    Uses the DocTemplate margins to position.
+    """
+    text = branding_line(AGENT_VERSION)
+    canvas.saveState()
+    try:
+        canvas.setFont("Helvetica", 8)
+        # Right edge inside page margin
+        right_x = doc.pagesize[0] - doc.rightMargin
+        # Slightly below the top margin to avoid clipping
+        y = doc.pagesize[1] - doc.topMargin + (0.22 * inch)
+        # Draw right-aligned
+        canvas.drawRightString(right_x, y, text)
+    finally:
+        canvas.restoreState()
+
+def _on_page_branding_bottom(canvas: Canvas, doc) -> None:
+    """
+    Draw small, right-aligned branding text at the bottom of each page.
+    """
+    text = branding_line(AGENT_VERSION)  # already timezone-aware
+    canvas.saveState()
+    try:
+        canvas.setFont("Helvetica", 8)
+        right_x = doc.pagesize[0] - doc.rightMargin
+        # Slightly above the bottom margin to avoid clipping
+        y = doc.bottomMargin - (0.18 * inch)
+        # If your bottom margin is small, clamp to a minimum
+        if y < 0.25 * inch:
+            y = 0.25 * inch
+        canvas.drawRightString(right_x, y, text)
+    finally:
+        canvas.restoreState()
+
 # ------------------------ DOCX utilities ------------------------
 
 def _add_hyperlink(paragraph, url: str, text: str, color="0000FF", underline=True):
@@ -303,6 +374,9 @@ def generate_docx_structured(
     section_order: Optional[List[str]] = None,
 ) -> None:
     doc = Document()
+
+    # Add header with branding
+    add_docx_footer_branding(doc)
 
     # Add header with title and the coat of arms
     title = report_title or _default_title(country)
@@ -550,4 +624,8 @@ def generate_pdf_structured(
         topMargin = PDF_TOP_MARGIN * inch,
         bottomMargin = PDF_BOTTOM_MARGIN * inch
     )
-    doc.build(flow)
+    doc.build(
+        flow,
+        onFirstPage=_on_page_branding_bottom,
+        onLaterPages=_on_page_branding_bottom,
+    )
