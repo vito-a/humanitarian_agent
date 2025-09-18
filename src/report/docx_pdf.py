@@ -511,7 +511,7 @@ def generate_pdf_structured(
     #flow.append(Spacer(1, 0.2*inch))
     #flow.append(Paragraph(title, title_style))
     #flow.append(Spacer(1, 12))
-    flow.append(header_with_coa_pdf(country, report_title, styles, total_width=LETTER[0]))
+    flow.append(header_with_coa_pdf(country, title, styles, total_width=LETTER[0]))
     flow.append(Spacer(1, 0.2*inch))
 
     # Executive Summary

@@ -309,7 +309,8 @@ def _build_primary_relevance_prompt_light(
         - It must relate to at least one allowed section (use the given titles).
         - Pop culture, memes, entertainment listicles, and unrelated topics must be rejected.
         - It is about the harm done to the target country, its civilians, health and economy.
-        - Any countermeasures and counterattacks done by the target country and its citizens must be rejected.
+        - Any articles about army, soldiers and officers, where civilian topics are not mentioned, must be rejected.
+        - Any articles about the military operations where civilian topics are not mentioned, must be rejected.
         - Focus only on the target country, the articles about the countries far away must be rejected.
         - And even the articles mentioning the closest neighbouring states, even if the topic is related, must be rejected.
         - Be conservative: if unsure, reject (pass=false).

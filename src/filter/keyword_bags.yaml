@@ -212,7 +212,7 @@ negative_exclude:  ["sports","soccer","football","tennis","basketball","celebrit
                     "photo essay","travel","lifestyle","recipe","stock","election","campaign trail","club","dynamo","fan","player","oil","federal","arrest","robbery","veteran",
                     "dog","cook","recipe","restaurant","charlie","kirk","charlie kirk","los angeles","manhunt","conservative","republican","gunman","royal","opera","ballet"]
 negative_frontline: ["reconnaissance","trench","army","alliance","NATO","hunt","furia","leleka","bayraktar","liutyi","osa","aerorozvidka","bober","palianytsia","flamingo","peklo",
-                     "punisher","arms","armored","tank","mortar","artillery","swarm","anti(\\s?|-)tank","ukrainian drone"]
+                     "punisher","arms","armored","tank","mortar","artillery","swarm","anti(\\s?|-)tank","ukrainian drone","military"]
 
 thresholds:
   allowlist_keep: 30
