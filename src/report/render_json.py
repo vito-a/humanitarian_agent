@@ -14,7 +14,7 @@ def _find_latest_json(country: str) -> Optional[Path]:
 def _default_outputs(report: Dict[str, Any], json_path: Path) -> (Path, Path):
     country = (report.get("country") or "report").lower()
     as_of = report.get("as_of") or datetime.now().date().isoformat()
-    base = f"{country}_{as_of}"
+    base = f"humanitarian_digest_{country}_{as_of}"
     out_docx = REPORTS_DIR / f"{base}.docx"
     out_pdf  = REPORTS_DIR / f"{base}.pdf"
     return out_docx, out_pdf
