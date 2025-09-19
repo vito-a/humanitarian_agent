@@ -3,6 +3,21 @@
 An offline, LLM-powered agent for generating structured humanitarian situation reports from trusted news and NGO feeds.
 Designed for operations leads and analysts conducting due diligence on conflict-affected countries.
 
+## Screenshots
+Agent Reports:
+
+![Agent Reports](https://raw.githubusercontent.com/vito-a/humanitarian_agent/main/assets/reports/humanitarian_agent_reports01.png)
+
+Agent Logs:
+
+![Agent Logs](https://raw.githubusercontent.com/vito-a/humanitarian_agent/main/assets/reports/humanitarian_agent_logs01.png)
+
+PDF report sample:
+https://github.com/vito-a/humanitarian_agent/blob/main/assets/reports/humanitarian_digest_ukraine_2025-09-17.pdf
+
+DOCX report sample: 
+https://github.com/vito-a/humanitarian_agent/blob/main/assets/reports/humanitarian_digest_ukraine_2025-09-17.pdf
+
 ## Features
 
 * **Data ingestion**: Scrapes and caches RSS feeds from ReliefWeb/OCHA, UNHCR, WHO, and other vetted sources.
