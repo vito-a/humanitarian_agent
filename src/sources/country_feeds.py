@@ -91,11 +91,17 @@ UKRAINE_FEEDS = [
 ]
 
 SYRIA_FEEDS = [
+    "https://news.un.org/feed/subscribe/en/news/region/middle-east/feed/rss.xml", # UN Middle East
+    "https://www.rferl.org/z/23337",                                   # RFERL Middle East
+    "https://reliefweb.int/updates/rss.xml?view=maps",                 # UN OCHA
+    "https://reliefweb.int/updates/rss.xml",                           # UN OCHA Updates
     "http://rss.cnn.com/rss/edition_world.rss",                        # CNN World
     "https://feeds.npr.org/1004/rss.xml",                              # NPR World
 ]
 
 YEMEN_FEEDS = [
+    "https://news.un.org/feed/subscribe/en/news/region/middle-east/feed/rss.xml" # UN Middle East
+    "https://www.rferl.org/z/23337",                                   # RFERL Middle East
     "https://reliefweb.int/updates/rss.xml?view=maps",                 # UN OCHA
     "https://reliefweb.int/updates/rss.xml",                           # UN OCHA Updates
     "https://rss.cnn.com/rss/edition_world.rss",                       # CNN World
